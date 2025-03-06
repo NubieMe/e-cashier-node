@@ -1,28 +1,29 @@
-import { ObjectId } from "mongodb";
-import { filter, isObjectId } from "./helper"
+import { isObjectId, queryMonth } from "./helper"
 import { ResponseError } from "../../error/response-error";
-import { Model } from "mongoose";
+import { Model, PopulateOptions } from "mongoose";
 import { validate } from "../../utils/validator";
 import { ZodType } from "zod";
 
-export default new class ServiceFactory {
-    async create(model: typeof Model, request: any, schema: ZodType) {
+export default class ServiceFactory {
+    static async create(model: typeof Model, request: any, schema?: ZodType, pop: PopulateOptions[] = []) {
         try {
-            const body = validate(schema, request);
-            const data = model.create(body);
+            let body = request;
+            if (schema) body = validate(schema, request);
+
+            const data = await model.create(body);
             if (!data) throw new ResponseError("Failed to create", 500);
-    
-            return data;
+            
+            return await data.populate(pop).lean();
         } catch (error) {
             throw error;
         }
     }
     
-    async update (model: typeof Model, request: any, schema: ZodType) {
+    static async update (model: typeof Model, request: any, schema: ZodType) {
         try {
             const body = validate(schema, request);
 
-            const data = await model.findOneAndUpdate({ _id: request._id }, body);
+            const data = await model.findOneAndUpdate({ _id: request._id }, body).lean();
             if (!data) throw new ResponseError("Data not found", 404);
     
             return { ...data, ...body };
@@ -31,7 +32,7 @@ export default new class ServiceFactory {
         }
     }
     
-    async getAll(model: typeof Model, query: any) {
+    static async getAll(model: typeof Model, query: any, pop: PopulateOptions[] = [], select: string[] = []) {
         try {
             let page = parseInt(query.page) || 1, limit = parseInt(query.limit) || 10, sort = query.sort || { created_date: -1 };
             const skip = (page - 1) * limit;
@@ -41,26 +42,27 @@ export default new class ServiceFactory {
             const search = query;
 
             if (search) {
-                Object.keys(search).forEach((k) => {
+                Object.keys(search).forEach(k => {
                     if (Array.isArray(search[k])) {
-                        const values = search[k].map(v => {
-                            const oid = isObjectId(v);
-                            if (!oid) return v;
-                            return oid;
-                        });
-                        q[k] = { $in: values };
+                        q[k] = { $in: search[k] };
                     } else if (search[k] === "true" || search[k] === "false") {
                         q[k] = search[k] === "true"
                     } else if (isObjectId(search[k])) {
                         q[k] = search[k];
+                    } else if (k === "start_date") {
+                        q[k] = { $gte: search[k] };
+                    } else if (k === "end_date") {
+                        q[k] = { $lte: search[k] };
+                    } else if (k === "month_date") {
+                        q[k] = queryMonth(search[k]);
                     } else {
                         q[k] = { $regex: search[k], $options: "i" };
                     }
                 });
             }
     
-            const total = await model.countDocuments(q);
-            const data = await model.find(q).sort(sort).skip(skip).limit(limit);
+            const total = await model.countDocuments(q).lean();
+            const data = await model.find(q).select(select).sort(sort).skip(skip).limit(limit).populate(pop).lean();
     
             return { total, data };
         } catch (error) {
@@ -68,9 +70,9 @@ export default new class ServiceFactory {
         }
     }
     
-    async getOne(model: typeof Model, id: string) {
+    static async getOne(model: typeof Model, id: string, pop: PopulateOptions[] = [], select: string[] = []) {
         try {
-            const data = await model.findById(id);
+            const data = await model.findById(id).select(select).populate(pop).lean();
             if (!data) throw new ResponseError("Data not found", 404);
 
             return data;
@@ -79,9 +81,9 @@ export default new class ServiceFactory {
         }
     }
 
-    async deleteFlag(model: typeof Model, _id: string) {
+    static async deleteFlag(model: typeof Model, _id: string) {
         try {
-            const data = await model.findOneAndUpdate({ _id }, { is_delete: true, deleted_date: new Date() });
+            const data = await model.findOneAndUpdate({ _id }, { is_delete: true, deleted_date: new Date() }).lean();
             if (!data) throw new ResponseError("Data not found", 404);
 
             return data
@@ -90,9 +92,9 @@ export default new class ServiceFactory {
         }
     }
 
-    async deleteOne(model: typeof Model, _id: string) {
+    static async delete(model: typeof Model, _id: string) {
         try {
-            const data = await model.findOneAndDelete({ _id });
+            const data = await model.findOneAndDelete({ _id }).lean();
             if (!data) throw new ResponseError("Data not found", 404);
 
             return data
