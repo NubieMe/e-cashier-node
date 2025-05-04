@@ -19,16 +19,17 @@ export const auth = (roles?: string[]) => async (req: UserRequest, res: Response
     const token = authHeader.split(" ")[1];
 
     try {
-        const verif = jwt.verify(token, process.env.SECRET_KEY) as { _id: string, role: string };
+        const payload = jwt.verify(token, process.env.SECRET_KEY) as { _id: string, role: string, profile: string };
 
-        if (roles) {
-            const role = await Role.find({ name: { $in: roles.map(role => new RegExp(role, "i")) } }, { projection: { _id: 1 } }).lean();
-            const user = await User.countDocuments({ _id: verif._id, token }).lean();
+        if (roles && roles.length) {
+            roles.push("root");
+            const role = await Role.find({ name: { $in: roles.map(role => new RegExp(role, "i")) } }, { _id: 1 }).lean();
+            const user = await User.countDocuments({ _id: payload._id, token }).lean();
     
             if (!user) next(new ResponseError("Token is not valid", 401));
-            if (!role.some(doc => doc._id.equals(verif.role))) return next(new ResponseError("You don't have permission", 403));
+            if (!role.some(doc => doc._id.equals(payload.role))) return next(new ResponseError("You don't have permission", 403));
         }
-        req.user = verif;
+        req.user = payload;
 
         next();
     } catch (error) {
