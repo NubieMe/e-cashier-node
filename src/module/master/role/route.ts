@@ -1,12 +1,13 @@
 import express from "express";
 import RoleController from "./controller";
+import { auth } from "../../../middleware/auth";
 
 const router = express.Router();
 
-router.get("/", RoleController.getAllRole);
-router.get("/:id", RoleController.getOneRole);
-router.post("/", RoleController.addRole);
-router.patch("/:id", RoleController.updateRole);
-router.delete("/:id", RoleController.deleteRole);
+router.get("/", RoleController.getAll);
+router.get("/:id", RoleController.getOne);
+router.post("/", auth(["admin"]), RoleController.create);
+router.patch("/:id", auth(["admin"]), RoleController.update);
+router.delete("/:id", auth(["admin"]), RoleController.delete);
 
 export default router;
