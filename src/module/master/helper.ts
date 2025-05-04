@@ -42,3 +42,26 @@ export const isObjectId = (str: string) => {
         return null;
     }
 };
+
+/**
+ * Returns a query object for MongoDB that matches all dates in the given month (inclusive),
+ * taking into account the UTC+7 timezone offset.
+ * @param date The date for which to get the query object.
+ * @returns The query object.
+ */
+export const queryMonth = (date: Date | string) => {
+    const tzOffset = 7 * 60 * 60000;
+
+    const start_date = new Date(date);
+    start_date.setDate(1);
+    start_date.setHours(0, 0, 0, 0);
+    const start_utc7 = new Date(start_date.getTime() - tzOffset);
+
+    const end_date = new Date(start_date);
+    end_date.setMonth(end_date.getMonth() + 1);
+    end_date.setDate(0);
+    end_date.setHours(23, 59, 59, 999);
+    const end_utc7 = new Date(end_date.getTime() - tzOffset);
+
+    return { $gte: start_utc7, $lte: end_utc7 };
+};
