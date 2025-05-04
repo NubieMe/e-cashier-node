@@ -5,28 +5,41 @@ import { validate } from "../../utils/validator";
 import { ZodType } from "zod";
 
 export default class ServiceFactory {
-    static async create(model: typeof Model, request: any, schema?: ZodType, pop: PopulateOptions[] = []) {
+    static async create(model: typeof Model, request: any, schema?: ZodType, pop: PopulateOptions[] = [], session = undefined) {
         try {
             let body = request;
             if (schema) body = validate(schema, request);
 
-            const data = await model.create(body);
+            let data;
+            if (session) {
+                data = await model.create([body], { session });
+                data = data[0];
+            }
+            else data = await model.create(body);
+
             if (!data) throw new ResponseError("Failed to create", 500);
             
-            return await data.populate(pop).lean();
+            if (pop.length) return await data.populate(pop).lean();
+            else return data;
         } catch (error) {
             throw error;
         }
     }
     
-    static async update (model: typeof Model, request: any, schema: ZodType) {
+    static async update (model: typeof Model, request: any, schema: ZodType, session = undefined) {
         try {
-            const body = validate(schema, request);
+            const date = new Date();
+            let body = request;
+            
+            if (schema) body = validate(schema, request);
+            body.updated_date = date;
 
-            const data = await model.findOneAndUpdate({ _id: request._id }, body).lean();
+            let data;
+            if (session) data = await model.findByIdAndUpdate(request._id, body, { session, new: true }).lean();
+            else data = await model.findByIdAndUpdate(request._id, body, { new: true }).lean();
             if (!data) throw new ResponseError("Data not found", 404);
     
-            return { ...data, ...body };
+            return data;
         } catch (error) {
             throw error;
         }
